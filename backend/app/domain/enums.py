@@ -58,9 +58,26 @@ class ApprovalStatus(StrEnum):
     EXPIRED = "EXPIRED"
 
 
+class EvaluationStatus(StrEnum):
+    """Lifecycle states for evaluation executions."""
+
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    PASSED = "PASSED"
+    FAILED = "FAILED"
+
+
+class EvaluationResultStatus(StrEnum):
+    """Outcome states for individual evaluation cases."""
+
+    PASSED = "PASSED"
+    FAILED = "FAILED"
+
+
 class TraceEventType(StrEnum):
     """High-level trace event categories."""
 
     AGENT_RUN = "AGENT_RUN"
     TOOL_CALL = "TOOL_CALL"
     POLICY_CHECK = "POLICY_CHECK"
+    EVALUATION = "EVALUATION"

@@ -1,0 +1,17 @@
+{
+  "name": "basic-agent-suite",
+  "cases": [
+    {
+      "name": "file-read-test",
+      "task": "pyproject.toml",
+      "tool_name": "file",
+      "expected_tool_name": "file"
+    },
+    {
+      "name": "browser-summary-test",
+      "task": "search and summarize",
+      "tool_name": "browser",
+      "expected_tool_name": "browser"
+    }
+  ]
+}

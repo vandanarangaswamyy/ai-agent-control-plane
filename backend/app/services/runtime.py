@@ -31,6 +31,16 @@ class RuntimeService:
         self._safety_gateway = safety_gateway
         self._metrics = metrics or get_observability_metrics()
 
+    @property
+    def repository(self) -> RuntimeRepository:
+        """Expose the runtime repository for service composition."""
+        return self._repository
+
+    @property
+    def safety_gateway(self) -> SafetyGateway:
+        """Expose the safety gateway for service composition."""
+        return self._safety_gateway
+
     def create_run(
         self,
         *,
@@ -248,6 +258,7 @@ class RuntimeService:
             name=event_name,
             attributes=attributes,
         )
+
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
