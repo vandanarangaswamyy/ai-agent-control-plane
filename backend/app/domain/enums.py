@@ -81,3 +81,12 @@ class TraceEventType(StrEnum):
     TOOL_CALL = "TOOL_CALL"
     POLICY_CHECK = "POLICY_CHECK"
     EVALUATION = "EVALUATION"
+    DEPLOYMENT = "DEPLOYMENT"
+
+
+class DeploymentEventType(StrEnum):
+    """Lifecycle events recorded by deployment control."""
+
+    PROMOTE = "PROMOTE"
+    ROLLBACK = "ROLLBACK"
+    DEPRECATE = "DEPRECATE"

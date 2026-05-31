@@ -11,10 +11,12 @@ from app.core.metrics import ObservabilityMetrics, get_observability_metrics
 from app.db.session import SessionLocal, get_session
 from app.repositories.agents import AgentRepository
 from app.repositories.approvals import ApprovalRepository
+from app.repositories.deployments import DeploymentRepository
 from app.repositories.evaluations import EvaluationRepository
 from app.repositories.runtime import RuntimeRepository
 from app.services.agent_registry import AgentRegistryService
 from app.services.approvals import ApprovalService
+from app.services.deployments import DeploymentService
 from app.services.evaluation_suites import EvaluationSuiteLoader
 from app.services.evaluations import EvaluationService
 from app.services.health import HealthService
@@ -45,7 +47,10 @@ def get_agent_registry_service(
 ) -> AgentRegistryService:
     """Provide the Agent Registry service."""
     repository = AgentRepository(session=session)
-    return AgentRegistryService(session=session, repository=repository)
+    deployment_repository = DeploymentRepository(session=session)
+    return AgentRegistryService(session=session, repository=repository).with_deployment_repository(
+        deployment_repository
+    )
 
 
 def get_runtime_service(
@@ -99,6 +104,14 @@ def get_evaluation_service(
     )
 
 
+def get_deployment_service(
+    session: Annotated[Session, Depends(get_db_session)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
+) -> DeploymentService:
+    """Provide the deployment control service."""
+    return _build_deployment_service(session=session, settings=settings)
+
+
 def get_metrics_service() -> ObservabilityMetrics:
     """Provide the shared observability metrics registry."""
     return get_observability_metrics()
@@ -127,4 +140,19 @@ def _build_safety_gateway(
         tool_registry=ToolRegistry(),
         policy_engine=PolicyEngine(),
         metrics=get_observability_metrics(),
+    )
+
+
+def _build_deployment_service(*, session: Session, settings: Settings) -> DeploymentService:
+    agent_repository = AgentRepository(session=session)
+    evaluation_repository = EvaluationRepository(session=session)
+    deployment_repository = DeploymentRepository(session=session)
+    runtime_repository = RuntimeRepository(session=session)
+    return DeploymentService(
+        session=session,
+        agent_repository=agent_repository,
+        evaluation_repository=evaluation_repository,
+        deployment_repository=deployment_repository,
+        runtime_repository=runtime_repository,
+        minimum_success_rate=settings.deployment_min_success_rate,
     )
