@@ -19,3 +19,30 @@ class AgentVersionLifecycle(StrEnum):
     APPROVED = "APPROVED"
     PRODUCTION = "PRODUCTION"
     DEPRECATED = "DEPRECATED"
+
+
+class AgentRunStatus(StrEnum):
+    """Execution lifecycle states for an agent run."""
+
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    BLOCKED = "BLOCKED"
+
+
+class ToolCallStatus(StrEnum):
+    """Execution lifecycle states for a tool invocation."""
+
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    BLOCKED = "BLOCKED"
+
+
+class TraceEventType(StrEnum):
+    """High-level trace event categories."""
+
+    AGENT_RUN = "AGENT_RUN"
+    TOOL_CALL = "TOOL_CALL"

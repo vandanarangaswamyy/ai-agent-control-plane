@@ -9,8 +9,11 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.db.session import SessionLocal, get_session
 from app.repositories.agents import AgentRepository
+from app.repositories.runtime import RuntimeRepository
 from app.services.agent_registry import AgentRegistryService
 from app.services.health import HealthService
+from app.services.runtime import RuntimeService
+from app.tools.registry import ToolRegistry
 
 
 def get_app_settings() -> Settings:
@@ -34,3 +37,15 @@ def get_agent_registry_service(
     """Provide the Agent Registry service."""
     repository = AgentRepository(session=session)
     return AgentRegistryService(session=session, repository=repository)
+
+
+def get_runtime_service(
+    session: Annotated[Session, Depends(get_db_session)],
+) -> RuntimeService:
+    """Provide the Runtime service."""
+    repository = RuntimeRepository(session=session)
+    return RuntimeService(
+        session=session,
+        repository=repository,
+        tool_registry=ToolRegistry(),
+    )
