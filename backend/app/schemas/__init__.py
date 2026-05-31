@@ -8,7 +8,13 @@ from app.schemas.agents import (
     AgentVersionUpdate,
 )
 from app.schemas.approvals import ApprovalRequestRead, ApprovalReviewRequest
-from app.schemas.runs import RunCreate, RunRead
+from app.schemas.observability import (
+    RunFailureInspectionRead,
+    RunTimelineRead,
+    TraceEventRead,
+    TraceLookupRead,
+)
+from app.schemas.runs import RunCreate, RunRead, ToolCallRead
 
 __all__ = [
     "AgentCreate",
@@ -18,6 +24,11 @@ __all__ = [
     "AgentVersionUpdate",
     "ApprovalRequestRead",
     "ApprovalReviewRequest",
+    "RunFailureInspectionRead",
+    "RunTimelineRead",
     "RunCreate",
     "RunRead",
+    "ToolCallRead",
+    "TraceEventRead",
+    "TraceLookupRead",
 ]

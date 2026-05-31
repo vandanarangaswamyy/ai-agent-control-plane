@@ -7,7 +7,7 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from app.domain.enums import AgentRunStatus
+from app.domain.enums import AgentRunStatus, ToolCallStatus
 
 TaskText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 ToolName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
@@ -43,5 +43,26 @@ class RunRead(BaseModel):
     token_count: int | None
     estimated_cost: Decimal | None = Field(default=None)
     trace_id: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ToolCallRead(BaseModel):
+    """Tool invocation response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    agent_run_id: uuid.UUID
+    tool_name: str
+    status: ToolCallStatus
+    input: dict[str, Any]
+    output: dict[str, Any] | None
+    error_message: str | None
+    start_time: datetime | None
+    end_time: datetime | None
+    latency_ms: int | None
+    trace_id: str | None
+    span_id: str | None
     created_at: datetime
     updated_at: datetime

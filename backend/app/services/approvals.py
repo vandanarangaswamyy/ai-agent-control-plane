@@ -6,6 +6,8 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from app.core.metrics import ObservabilityMetrics, get_observability_metrics
+from app.core.telemetry import get_tracer
 from app.db.models.approval import ApprovalRequest
 from app.db.models.runtime import AgentRun, ToolCall
 from app.domain.enums import AgentRunStatus, ApprovalStatus, ToolCallStatus, TraceEventType
@@ -26,11 +28,13 @@ class ApprovalService:
         approval_repository: ApprovalRepository,
         runtime_repository: RuntimeRepository,
         safety_gateway: SafetyGateway,
+        metrics: ObservabilityMetrics | None = None,
     ) -> None:
         self._session = session
         self._approval_repository = approval_repository
         self._runtime_repository = runtime_repository
         self._safety_gateway = safety_gateway
+        self._metrics = metrics or get_observability_metrics()
 
     def list_approval_requests(self, *, limit: int, offset: int) -> list[ApprovalRequest]:
         return self._approval_repository.list_approval_requests(limit=limit, offset=offset)
@@ -42,58 +46,68 @@ class ApprovalService:
         return approval
 
     def approve(self, *, approval_id: uuid.UUID, reviewed_by: str | None = None) -> ApprovalRequest:
-        approval = self._get_pending_approval_for_update(approval_id)
-        run, tool_call = self._load_runtime_records(approval)
+        tracer = get_tracer(__name__)
+        with tracer.start_as_current_span("approval.review") as span:
+            span.set_attribute("approval.action", "approve")
+            approval = self._get_pending_approval_for_update(approval_id)
+            run, tool_call = self._load_runtime_records(approval)
 
-        approval.mark_reviewed(status=ApprovalStatus.APPROVED, reviewed_by=reviewed_by)
-        run.status = AgentRunStatus.RUNNING
-        run.error_message = None
-        self._safety_gateway.trace_approval_event(
-            run=run,
-            tool_call=tool_call,
-            event_name="ApprovalApproved",
-            attributes={
-                "approval_request_id": str(approval.id),
-                "reviewed_by": reviewed_by,
-            },
-        )
+            approval.mark_reviewed(status=ApprovalStatus.APPROVED, reviewed_by=reviewed_by)
+            run.status = AgentRunStatus.RUNNING
+            run.error_message = None
+            self._safety_gateway.trace_approval_event(
+                run=run,
+                tool_call=tool_call,
+                event_name="ApprovalApproved",
+                attributes={
+                    "approval_request_id": str(approval.id),
+                    "reviewed_by": reviewed_by,
+                },
+            )
 
-        tool_result = self._safety_gateway.execute_approved_tool(run=run, tool_call=tool_call)
-        self._finalize_run_after_tool(run=run, tool_call=tool_call, tool_result=tool_result)
-        self._session.commit()
-        self._session.refresh(approval)
-        return approval
+            tool_result = self._safety_gateway.execute_approved_tool(run=run, tool_call=tool_call)
+            self._finalize_run_after_tool(run=run, tool_call=tool_call, tool_result=tool_result)
+            self._metrics.record_approval_approved()
+            self._session.commit()
+            self._session.refresh(approval)
+            span.set_attribute("approval.status", approval.status.value)
+            return approval
 
     def reject(self, *, approval_id: uuid.UUID, reviewed_by: str | None = None) -> ApprovalRequest:
-        approval = self._get_pending_approval_for_update(approval_id)
-        run, tool_call = self._load_runtime_records(approval)
+        tracer = get_tracer(__name__)
+        with tracer.start_as_current_span("approval.review") as span:
+            span.set_attribute("approval.action", "reject")
+            approval = self._get_pending_approval_for_update(approval_id)
+            run, tool_call = self._load_runtime_records(approval)
 
-        approval.mark_reviewed(status=ApprovalStatus.REJECTED, reviewed_by=reviewed_by)
-        run.status = AgentRunStatus.BLOCKED
-        run.error_message = "approval rejected"
-        tool_call.status = ToolCallStatus.BLOCKED
-        tool_call.error_message = "approval rejected"
-        self._safety_gateway.trace_approval_event(
-            run=run,
-            tool_call=tool_call,
-            event_name="ApprovalRejected",
-            attributes={
-                "approval_request_id": str(approval.id),
-                "reviewed_by": reviewed_by,
-            },
-        )
-        self._safety_gateway.trace_approval_event(
-            run=run,
-            tool_call=tool_call,
-            event_name="ToolBlocked",
-            attributes={
-                "approval_request_id": str(approval.id),
-                "reason": "approval rejected",
-            },
-        )
-        self._session.commit()
-        self._session.refresh(approval)
-        return approval
+            approval.mark_reviewed(status=ApprovalStatus.REJECTED, reviewed_by=reviewed_by)
+            run.status = AgentRunStatus.BLOCKED
+            run.error_message = "approval rejected"
+            tool_call.status = ToolCallStatus.BLOCKED
+            tool_call.error_message = "approval rejected"
+            self._safety_gateway.trace_approval_event(
+                run=run,
+                tool_call=tool_call,
+                event_name="ApprovalRejected",
+                attributes={
+                    "approval_request_id": str(approval.id),
+                    "reviewed_by": reviewed_by,
+                },
+            )
+            self._safety_gateway.trace_approval_event(
+                run=run,
+                tool_call=tool_call,
+                event_name="ToolBlocked",
+                attributes={
+                    "approval_request_id": str(approval.id),
+                    "reason": "approval rejected",
+                },
+            )
+            self._metrics.record_approval_rejected()
+            self._session.commit()
+            self._session.refresh(approval)
+            span.set_attribute("approval.status", approval.status.value)
+            return approval
 
     def _get_pending_approval_for_update(self, approval_id: uuid.UUID) -> ApprovalRequest:
         approval = self._approval_repository.get_approval_request_for_update(approval_id)
@@ -140,6 +154,8 @@ class ApprovalService:
                     "error_message": run.error_message,
                 },
             )
+            self._metrics.record_run_failed()
+            self._metrics.observe_run_latency_ms(run.latency_ms)
             return
 
         run.output = {
@@ -163,6 +179,8 @@ class ApprovalService:
                 "latency_ms": run.latency_ms,
             },
         )
+        self._metrics.record_run_success()
+        self._metrics.observe_run_latency_ms(run.latency_ms)
 
 
 def _utc_now() -> datetime:

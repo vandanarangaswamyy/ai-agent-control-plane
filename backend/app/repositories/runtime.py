@@ -53,6 +53,26 @@ class RuntimeRepository:
     def get_tool_call(self, tool_call_id: uuid.UUID) -> ToolCall | None:
         return self._session.get(ToolCall, tool_call_id)
 
+    def list_tool_calls_for_run(
+        self,
+        run_id: uuid.UUID,
+        *,
+        status: ToolCallStatus | None = None,
+    ) -> list[ToolCall]:
+        statement = select(ToolCall).where(ToolCall.agent_run_id == run_id)
+        if status is not None:
+            statement = statement.where(ToolCall.status == status)
+        statement = statement.order_by(ToolCall.created_at.asc(), ToolCall.id.asc())
+        return list(self._session.scalars(statement).all())
+
+    def list_traces_by_trace_id(self, trace_id: str) -> list[Trace]:
+        statement = (
+            select(Trace)
+            .where(Trace.trace_id == trace_id)
+            .order_by(Trace.timestamp.asc(), Trace.id.asc())
+        )
+        return list(self._session.scalars(statement).all())
+
     def create_tool_call(
         self,
         *,
