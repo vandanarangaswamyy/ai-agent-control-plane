@@ -11,6 +11,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy import Enum as SQLAlchemyEnum
 from sqlalchemy.dialects.postgresql import JSONB
@@ -49,6 +50,13 @@ class AgentVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint("version > 0", name="ck_agent_versions_version_positive"),
         UniqueConstraint("agent_id", "version", name="uq_agent_versions_agent_id_version"),
         Index("ix_agent_versions_agent_id_lifecycle", "agent_id", "lifecycle"),
+        Index(
+            "uq_agent_versions_agent_id_production",
+            "agent_id",
+            unique=True,
+            postgresql_where=text("lifecycle = 'PRODUCTION'"),
+            sqlite_where=text("lifecycle = 'PRODUCTION'"),
+        ),
     )
 
     agent_id: Mapped[uuid.UUID] = mapped_column(

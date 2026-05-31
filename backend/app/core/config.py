@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from functools import lru_cache
 
 from pydantic import Field
@@ -25,6 +26,7 @@ class Settings(BaseSettings):
 
     prometheus_metrics_enabled: bool = Field(default=False)
     otel_service_name: str = Field(default="ai-agent-control-plane-api")
+    deployment_min_success_rate: Decimal = Field(default=Decimal("0.95"))
 
     model_config = SettingsConfigDict(
         env_file=("../.env", ".env"),
@@ -38,4 +40,3 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Return cached settings for process lifetime."""
     return Settings()
-

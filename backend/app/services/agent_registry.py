@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.models.agent import Agent, AgentVersion
-from app.domain.enums import AgentVersionLifecycle
+from app.domain.enums import AgentVersionLifecycle, DeploymentEventType
 from app.domain.errors import (
     BusinessRuleViolationError,
     ConflictError,
@@ -14,6 +14,7 @@ from app.domain.errors import (
     NotFoundError,
 )
 from app.repositories.agents import AgentRepository
+from app.repositories.deployments import DeploymentRepository
 
 
 class AgentRegistryService:
@@ -29,6 +30,14 @@ class AgentRegistryService:
     def __init__(self, *, session: Session, repository: AgentRepository) -> None:
         self._session = session
         self._repository = repository
+        self._deployment_repository: DeploymentRepository | None = None
+
+    def with_deployment_repository(
+        self,
+        deployment_repository: DeploymentRepository,
+    ) -> AgentRegistryService:
+        self._deployment_repository = deployment_repository
+        return self
 
     def create_agent(
         self,
@@ -152,6 +161,15 @@ class AgentRegistryService:
 
         agent_version.lifecycle = AgentVersionLifecycle.DEPRECATED
         self._repository.flush()
+        if self._deployment_repository is not None:
+            self._deployment_repository.create_event(
+                agent_id=agent_id,
+                event_type=DeploymentEventType.DEPRECATE,
+                source_version_id=agent_version.id,
+                target_version_id=None,
+                reason="version deprecated",
+                trace_id=uuid.uuid4().hex,
+            )
         self._session.commit()
         self._session.refresh(agent_version)
         return agent_version

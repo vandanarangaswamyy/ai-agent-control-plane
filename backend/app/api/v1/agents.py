@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import get_agent_registry_service
+from app.api.deps import get_agent_registry_service, get_deployment_service
 from app.schemas.agents import (
     AgentCreate,
     AgentRead,
@@ -13,13 +13,16 @@ from app.schemas.agents import (
     AgentVersionRead,
     AgentVersionUpdate,
 )
+from app.schemas.deployments import DeploymentEventRead
 from app.services.agent_registry import AgentRegistryService
+from app.services.deployments import DeploymentService
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
 LimitQuery = Annotated[int, Query(ge=1, le=100)]
 OffsetQuery = Annotated[int, Query(ge=0)]
 AgentRegistryDependency = Annotated[AgentRegistryService, Depends(get_agent_registry_service)]
+DeploymentDependency = Annotated[DeploymentService, Depends(get_deployment_service)]
 
 
 @router.post("", response_model=AgentRead, status_code=status.HTTP_201_CREATED)
@@ -109,3 +112,12 @@ def deprecate_agent_version(
 ) -> AgentVersionRead:
     agent_version = service.deprecate_version(agent_id=agent_id, version_id=version_id)
     return AgentVersionRead.model_validate(agent_version)
+
+
+@router.get("/{agent_id}/deployments", response_model=list[DeploymentEventRead])
+def list_agent_deployments(
+    agent_id: uuid.UUID,
+    service: DeploymentDependency,
+) -> list[DeploymentEventRead]:
+    events = service.list_deployment_events(agent_id=agent_id)
+    return [DeploymentEventRead.model_validate(event) for event in events]

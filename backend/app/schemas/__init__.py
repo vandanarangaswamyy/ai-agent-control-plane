@@ -8,6 +8,13 @@ from app.schemas.agents import (
     AgentVersionUpdate,
 )
 from app.schemas.approvals import ApprovalRequestRead, ApprovalReviewRequest
+from app.schemas.deployments import (
+    DeploymentEventRead,
+    DeploymentPromoteRequest,
+    DeploymentPromotionRead,
+    DeploymentRollbackRead,
+    DeploymentRollbackRequest,
+)
 from app.schemas.evaluations import (
     EvaluationCompareRequest,
     EvaluationComparisonRead,
@@ -36,6 +43,11 @@ __all__ = [
     "AgentVersionUpdate",
     "ApprovalRequestRead",
     "ApprovalReviewRequest",
+    "DeploymentEventRead",
+    "DeploymentPromotionRead",
+    "DeploymentPromoteRequest",
+    "DeploymentRollbackRead",
+    "DeploymentRollbackRequest",
     "EvaluationCompareRequest",
     "EvaluationComparisonRead",
     "EvaluationCreateRequest",

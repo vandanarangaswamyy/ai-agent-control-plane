@@ -65,6 +65,23 @@ class EvaluationRepository:
         )
         return self._session.scalars(statement).one_or_none()
 
+    def get_latest_completed_evaluation_for_version(
+        self,
+        agent_version_id: uuid.UUID,
+    ) -> Evaluation | None:
+        statement = (
+            select(Evaluation)
+            .where(
+                Evaluation.agent_version_id == agent_version_id,
+                Evaluation.status.in_(
+                    [EvaluationStatus.PASSED, EvaluationStatus.FAILED],
+                ),
+            )
+            .order_by(Evaluation.created_at.desc(), Evaluation.id.desc())
+            .limit(1)
+        )
+        return self._session.scalars(statement).one_or_none()
+
     def create_result(
         self,
         *,
