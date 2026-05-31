@@ -8,6 +8,18 @@ from app.schemas.agents import (
     AgentVersionUpdate,
 )
 from app.schemas.approvals import ApprovalRequestRead, ApprovalReviewRequest
+from app.schemas.evaluations import (
+    EvaluationCompareRequest,
+    EvaluationComparisonRead,
+    EvaluationCreateRequest,
+    EvaluationFindingRead,
+    EvaluationMetricDeltaRead,
+    EvaluationRead,
+    EvaluationReportRead,
+    EvaluationResultRead,
+    EvaluationSuiteCase,
+    EvaluationSuiteDefinition,
+)
 from app.schemas.observability import (
     RunFailureInspectionRead,
     RunTimelineRead,
@@ -24,6 +36,16 @@ __all__ = [
     "AgentVersionUpdate",
     "ApprovalRequestRead",
     "ApprovalReviewRequest",
+    "EvaluationCompareRequest",
+    "EvaluationComparisonRead",
+    "EvaluationCreateRequest",
+    "EvaluationFindingRead",
+    "EvaluationMetricDeltaRead",
+    "EvaluationRead",
+    "EvaluationReportRead",
+    "EvaluationResultRead",
+    "EvaluationSuiteCase",
+    "EvaluationSuiteDefinition",
     "RunFailureInspectionRead",
     "RunTimelineRead",
     "RunCreate",

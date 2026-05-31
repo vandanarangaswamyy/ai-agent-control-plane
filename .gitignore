@@ -16,3 +16,7 @@ htmlcov/
 
 postgres_data/
 redis_data/
+
+AGENTS.md
+PROJECT_STATE.md
+DECISIONS.md
