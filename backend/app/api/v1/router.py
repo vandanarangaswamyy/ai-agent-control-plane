@@ -2,5 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-api_v1_router = APIRouter()
+from app.api.v1.agents import router as agents_router
 
+api_v1_router = APIRouter()
+api_v1_router.include_router(agents_router)

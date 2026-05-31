@@ -1,2 +1,5 @@
-"""ORM models will be added with the first schema milestone."""
+"""ORM model exports."""
 
+from app.db.models.agent import Agent, AgentVersion
+
+__all__ = ["Agent", "AgentVersion"]

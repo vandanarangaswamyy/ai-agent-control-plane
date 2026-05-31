@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
-from app.api.v1.router import api_v1_router
+from app.api.errors import add_exception_handlers
 from app.api.v1.health import router as health_router
+from app.api.v1.router import api_v1_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 
@@ -21,6 +22,7 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json",
     )
 
+    add_exception_handlers(app)
     app.include_router(health_router)
     app.include_router(api_v1_router, prefix="/api/v1")
 
@@ -28,4 +30,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-

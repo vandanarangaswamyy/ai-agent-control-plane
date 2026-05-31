@@ -10,3 +10,12 @@ class HealthStatus(StrEnum):
     READY = "ready"
     NOT_READY = "not_ready"
 
+
+class AgentVersionLifecycle(StrEnum):
+    """Lifecycle states for versioned agent configurations."""
+
+    DRAFT = "DRAFT"
+    EVALUATED = "EVALUATED"
+    APPROVED = "APPROVED"
+    PRODUCTION = "PRODUCTION"
+    DEPRECATED = "DEPRECATED"
