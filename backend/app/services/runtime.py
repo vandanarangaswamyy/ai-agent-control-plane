@@ -6,12 +6,11 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from app.db.models.runtime import AgentRun, ToolCall
-from app.domain.enums import AgentRunStatus, ToolCallStatus, TraceEventType
+from app.db.models.runtime import AgentRun
+from app.domain.enums import AgentRunStatus, PolicyDecision, TraceEventType
 from app.domain.errors import BusinessRuleViolationError, NotFoundError
 from app.repositories.runtime import RuntimeRepository
-from app.tools.base import BaseTool, ToolResult
-from app.tools.registry import ToolRegistry
+from app.services.safety_gateway import GatewayResult, SafetyGateway
 
 
 class RuntimeService:
@@ -22,11 +21,11 @@ class RuntimeService:
         *,
         session: Session,
         repository: RuntimeRepository,
-        tool_registry: ToolRegistry,
+        safety_gateway: SafetyGateway,
     ) -> None:
         self._session = session
         self._repository = repository
-        self._tool_registry = tool_registry
+        self._safety_gateway = safety_gateway
 
     def create_run(
         self,
@@ -84,47 +83,14 @@ class RuntimeService:
 
         try:
             tool_name = self._resolve_tool_name(run)
-            tool = self._resolve_tool(tool_name)
             tool_input = self._resolve_tool_input(run, tool_name)
-            tool_call, tool_result = self._invoke_tool(run=run, tool=tool, tool_input=tool_input)
-
-            if not tool_result.success:
-                run.status = AgentRunStatus.FAILED
-                run.error_message = tool_result.error_message or "tool execution failed"
-                run.token_count = tool_result.token_count
-                run.estimated_cost = tool_result.estimated_cost
-                run.end_time = _utc_now()
-                run.latency_ms = _latency_ms(run.start_time, run.end_time)
-                self._trace(
-                    run=run,
-                    event_name="AgentRunFailed",
-                    attributes={
-                        "status": AgentRunStatus.FAILED.value,
-                        "error_message": run.error_message,
-                    },
-                )
-                self._session.commit()
-                self._session.refresh(run)
-                return run
-
-            run.output = {
-                "task": str(run.input.get("task") or ""),
-                "tool": tool_call.tool_name,
-                "tool_output": tool_result.output,
-            }
-            run.token_count = tool_result.token_count
-            run.estimated_cost = tool_result.estimated_cost
-            run.status = AgentRunStatus.SUCCESS
-            run.end_time = _utc_now()
-            run.latency_ms = _latency_ms(run.start_time, run.end_time)
-            self._trace(
+            gateway_result = self._safety_gateway.invoke_tool(
                 run=run,
-                event_name="AgentRunCompleted",
-                attributes={
-                    "status": AgentRunStatus.SUCCESS.value,
-                    "latency_ms": run.latency_ms,
-                },
+                tool_name=tool_name,
+                tool_input=tool_input,
             )
+
+            self._apply_gateway_result(run=run, gateway_result=gateway_result)
             self._session.commit()
             self._session.refresh(run)
             return run
@@ -168,53 +134,58 @@ class RuntimeService:
         )
         return self.execute_run(run.id)
 
-    def _invoke_tool(
-        self,
-        *,
-        run: AgentRun,
-        tool: BaseTool,
-        tool_input: dict[str, object],
-    ) -> tuple[ToolCall, ToolResult]:
-        span_id = uuid.uuid4().hex
-        tool_call = self._repository.create_tool_call(
-            agent_run_id=run.id,
-            tool_name=tool.name,
-            input_payload=tool_input,
-            trace_id=run.trace_id or uuid.uuid4().hex,
-            span_id=span_id,
-        )
-        tool_call.status = ToolCallStatus.RUNNING
-        tool_call.start_time = _utc_now()
-        self._trace_tool(
-            run=run,
-            tool_call=tool_call,
-            event_name="ToolInvoked",
-            attributes={"tool_name": tool.name},
-        )
-        self._session.flush()
+    def _apply_gateway_result(self, *, run: AgentRun, gateway_result: GatewayResult) -> None:
+        if gateway_result.decision == PolicyDecision.REQUIRE_APPROVAL:
+            run.status = AgentRunStatus.BLOCKED
+            run.error_message = gateway_result.reason
+            return
 
-        try:
-            result = tool.execute(tool_input)
-        except Exception as exc:
-            result = ToolResult(success=False, error_message=str(exc))
+        if gateway_result.decision == PolicyDecision.DENY:
+            run.status = AgentRunStatus.BLOCKED
+            run.error_message = gateway_result.reason
+            run.end_time = _utc_now()
+            run.latency_ms = _latency_ms(run.start_time, run.end_time)
+            return
 
-        tool_call.end_time = _utc_now()
-        tool_call.latency_ms = _latency_ms(tool_call.start_time, tool_call.end_time)
-        tool_call.output = result.output
-        tool_call.error_message = result.error_message
-        tool_call.status = ToolCallStatus.SUCCESS if result.success else ToolCallStatus.FAILED
-        self._trace_tool(
+        tool_result = gateway_result.tool_result
+        if tool_result is None:
+            raise RuntimeError("safety gateway did not return a tool result")
+
+        if not tool_result.success:
+            run.status = AgentRunStatus.FAILED
+            run.error_message = tool_result.error_message or "tool execution failed"
+            run.token_count = tool_result.token_count
+            run.estimated_cost = tool_result.estimated_cost
+            run.end_time = _utc_now()
+            run.latency_ms = _latency_ms(run.start_time, run.end_time)
+            self._trace(
+                run=run,
+                event_name="AgentRunFailed",
+                attributes={
+                    "status": AgentRunStatus.FAILED.value,
+                    "error_message": run.error_message,
+                },
+            )
+            return
+
+        run.output = {
+            "task": str(run.input.get("task") or ""),
+            "tool": gateway_result.tool_call.tool_name,
+            "tool_output": tool_result.output,
+        }
+        run.token_count = tool_result.token_count
+        run.estimated_cost = tool_result.estimated_cost
+        run.status = AgentRunStatus.SUCCESS
+        run.end_time = _utc_now()
+        run.latency_ms = _latency_ms(run.start_time, run.end_time)
+        self._trace(
             run=run,
-            tool_call=tool_call,
-            event_name="ToolSucceeded" if result.success else "ToolFailed",
+            event_name="AgentRunCompleted",
             attributes={
-                "tool_name": tool.name,
-                "status": tool_call.status.value,
-                "error_message": result.error_message,
+                "status": AgentRunStatus.SUCCESS.value,
+                "latency_ms": run.latency_ms,
             },
         )
-        self._session.flush()
-        return tool_call, result
 
     def _resolve_tool_name(self, run: AgentRun) -> str:
         configured_tool = run.input.get("tool_name")
@@ -225,15 +196,6 @@ class RuntimeService:
         tool_config = agent_version.tool_config if agent_version is not None else {}
         default_tool = tool_config.get("default_tool") if isinstance(tool_config, dict) else None
         return str(default_tool or "browser")
-
-    def _resolve_tool(self, tool_name: str) -> BaseTool:
-        tool = self._tool_registry.get(tool_name)
-        if tool is None:
-            available = ", ".join(self._tool_registry.names())
-            raise BusinessRuleViolationError(
-                f"unknown tool '{tool_name}'. available tools: {available}"
-            )
-        return tool
 
     def _resolve_tool_input(self, run: AgentRun, tool_name: str) -> dict[str, object]:
         explicit_input = run.input.get("tool_input")
@@ -267,25 +229,6 @@ class RuntimeService:
             attributes=attributes,
         )
 
-    def _trace_tool(
-        self,
-        *,
-        run: AgentRun,
-        tool_call: ToolCall,
-        event_name: str,
-        attributes: dict[str, object],
-    ) -> None:
-        self._repository.create_trace(
-            trace_id=run.trace_id or tool_call.trace_id or uuid.uuid4().hex,
-            span_id=tool_call.span_id,
-            event_type=TraceEventType.TOOL_CALL,
-            entity_type="tool_call",
-            entity_id=tool_call.id,
-            name=event_name,
-            attributes=attributes,
-        )
-
-
 def _utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -293,4 +236,8 @@ def _utc_now() -> datetime:
 def _latency_ms(start_time: datetime | None, end_time: datetime | None) -> int | None:
     if start_time is None or end_time is None:
         return None
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=UTC)
+    if end_time.tzinfo is None:
+        end_time = end_time.replace(tzinfo=UTC)
     return max(0, int((end_time - start_time).total_seconds() * 1000))

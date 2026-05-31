@@ -129,7 +129,7 @@ class Trace(UUIDPrimaryKeyMixin, Base):
             TraceEventType,
             values_callable=lambda event_type: [event.value for event in event_type],
             native_enum=False,
-            length=32,
+            length=64,
         ),
         nullable=False,
     )
