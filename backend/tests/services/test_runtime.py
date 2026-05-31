@@ -6,9 +6,12 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.db.models.runtime import AgentRun, ToolCall, Trace
 from app.domain.enums import AgentRunStatus, ToolCallStatus
 from app.repositories.agents import AgentRepository
+from app.repositories.approvals import ApprovalRepository
 from app.repositories.runtime import RuntimeRepository
 from app.services.agent_registry import AgentRegistryService
+from app.services.policy import PolicyEngine
 from app.services.runtime import RuntimeService
+from app.services.safety_gateway import SafetyGateway
 from app.tools.registry import ToolRegistry
 from app.workers import tasks
 
@@ -30,10 +33,17 @@ def create_agent_version(session: Session):
 
 
 def build_runtime_service(session: Session) -> RuntimeService:
+    runtime_repository = RuntimeRepository(session=session)
+    safety_gateway = SafetyGateway(
+        runtime_repository=runtime_repository,
+        approval_repository=ApprovalRepository(session=session),
+        tool_registry=ToolRegistry(),
+        policy_engine=PolicyEngine(),
+    )
     return RuntimeService(
         session=session,
-        repository=RuntimeRepository(session=session),
-        tool_registry=ToolRegistry(),
+        repository=runtime_repository,
+        safety_gateway=safety_gateway,
     )
 
 

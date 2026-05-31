@@ -41,8 +41,26 @@ class ToolCallStatus(StrEnum):
     BLOCKED = "BLOCKED"
 
 
+class PolicyDecision(StrEnum):
+    """Safety policy decisions for tool execution."""
+
+    ALLOW = "ALLOW"
+    REQUIRE_APPROVAL = "REQUIRE_APPROVAL"
+    DENY = "DENY"
+
+
+class ApprovalStatus(StrEnum):
+    """Lifecycle states for approval requests."""
+
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+
+
 class TraceEventType(StrEnum):
     """High-level trace event categories."""
 
     AGENT_RUN = "AGENT_RUN"
     TOOL_CALL = "TOOL_CALL"
+    POLICY_CHECK = "POLICY_CHECK"

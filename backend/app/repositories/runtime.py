@@ -50,6 +50,9 @@ class RuntimeRepository:
         statement = select(AgentRun).where(AgentRun.id == run_id).with_for_update()
         return self._session.scalars(statement).one_or_none()
 
+    def get_tool_call(self, tool_call_id: uuid.UUID) -> ToolCall | None:
+        return self._session.get(ToolCall, tool_call_id)
+
     def create_tool_call(
         self,
         *,

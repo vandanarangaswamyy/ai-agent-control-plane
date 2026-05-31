@@ -7,6 +7,7 @@ from app.schemas.agents import (
     AgentVersionRead,
     AgentVersionUpdate,
 )
+from app.schemas.approvals import ApprovalRequestRead, ApprovalReviewRequest
 from app.schemas.runs import RunCreate, RunRead
 
 __all__ = [
@@ -15,6 +16,8 @@ __all__ = [
     "AgentVersionCreate",
     "AgentVersionRead",
     "AgentVersionUpdate",
+    "ApprovalRequestRead",
+    "ApprovalReviewRequest",
     "RunCreate",
     "RunRead",
 ]
