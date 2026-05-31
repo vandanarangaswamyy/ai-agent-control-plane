@@ -33,3 +33,9 @@ class BusinessRuleViolationError(ApplicationError):
     """Raised when a request violates a domain rule."""
 
     message = "business rule violation"
+
+
+class ToolExecutionError(ApplicationError):
+    """Raised when a tool fails during runtime execution."""
+
+    message = "tool execution failed"
