@@ -6,7 +6,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from app.db.models.approval import ApprovalRequest
-from app.domain.enums import PolicyDecision
+from app.domain.enums import ApprovalStatus, PolicyDecision
 
 
 class ApprovalRepository:
@@ -56,6 +56,18 @@ class ApprovalRepository:
             select(ApprovalRequest).where(ApprovalRequest.id == approval_id).with_for_update()
         )
         return self._session.scalars(statement).one_or_none()
+
+    def list_approval_requests_for_run(
+        self,
+        run_id: uuid.UUID,
+        *,
+        status: ApprovalStatus | None = None,
+    ) -> list[ApprovalRequest]:
+        statement = select(ApprovalRequest).where(ApprovalRequest.agent_run_id == run_id)
+        if status is not None:
+            statement = statement.where(ApprovalRequest.status == status)
+        statement = statement.order_by(ApprovalRequest.created_at.asc(), ApprovalRequest.id.asc())
+        return list(self._session.scalars(statement).all())
 
     def flush(self) -> None:
         self._session.flush()

@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api.deps import get_db_session
+from app.core.metrics import reset_observability_metrics
+from app.core.telemetry import reset_tracing
 from app.db import models  # noqa: F401
 from app.db.base import Base
 from app.main import app
@@ -59,3 +61,12 @@ def client(db_session_factory: sessionmaker[Session]) -> Generator[TestClient, N
             yield test_client
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def reset_observability_state() -> Generator[None, None, None]:
+    reset_observability_metrics()
+    reset_tracing()
+    yield
+    reset_observability_metrics()
+    reset_tracing()

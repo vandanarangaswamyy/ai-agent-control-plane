@@ -6,6 +6,8 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
+from app.core.metrics import ObservabilityMetrics, get_observability_metrics
+from app.core.telemetry import get_tracer
 from app.db.models.runtime import AgentRun
 from app.domain.enums import AgentRunStatus, PolicyDecision, TraceEventType
 from app.domain.errors import BusinessRuleViolationError, NotFoundError
@@ -22,10 +24,12 @@ class RuntimeService:
         session: Session,
         repository: RuntimeRepository,
         safety_gateway: SafetyGateway,
+        metrics: ObservabilityMetrics | None = None,
     ) -> None:
         self._session = session
         self._repository = repository
         self._safety_gateway = safety_gateway
+        self._metrics = metrics or get_observability_metrics()
 
     def create_run(
         self,
@@ -52,6 +56,7 @@ class RuntimeService:
             input_payload=input_payload,
             trace_id=trace_id,
         )
+        self._metrics.record_run_created()
         self._session.commit()
         self._session.refresh(run)
         return run
@@ -66,57 +71,65 @@ class RuntimeService:
         return run
 
     def execute_run(self, run_id: uuid.UUID) -> AgentRun:
-        run = self._repository.get_run_for_update(run_id)
-        if run is None:
-            raise NotFoundError("agent run not found")
-        if run.status != AgentRunStatus.PENDING:
-            raise BusinessRuleViolationError("only PENDING runs can be executed")
+        tracer = get_tracer(__name__)
+        with tracer.start_as_current_span("runtime.execute_run") as span:
+            span.set_attribute("run.id", str(run_id))
+            run = self._repository.get_run_for_update(run_id)
+            if run is None:
+                raise NotFoundError("agent run not found")
+            if run.status != AgentRunStatus.PENDING:
+                raise BusinessRuleViolationError("only PENDING runs can be executed")
 
-        run.status = AgentRunStatus.RUNNING
-        run.start_time = _utc_now()
-        self._trace(
-            run=run,
-            event_name="AgentRunStarted",
-            attributes={"status": AgentRunStatus.RUNNING.value},
-        )
-        self._session.commit()
-
-        try:
-            tool_name = self._resolve_tool_name(run)
-            tool_input = self._resolve_tool_input(run, tool_name)
-            gateway_result = self._safety_gateway.invoke_tool(
-                run=run,
-                tool_name=tool_name,
-                tool_input=tool_input,
-            )
-
-            self._apply_gateway_result(run=run, gateway_result=gateway_result)
-            self._session.commit()
-            self._session.refresh(run)
-            return run
-        except Exception as exc:
-            self._session.rollback()
-            failed_run = self._repository.get_run_for_update(run_id)
-            if failed_run is None:
-                raise
-
-            failed_run.status = AgentRunStatus.FAILED
-            failed_run.error_message = str(exc)
-            failed_run.end_time = _utc_now()
-            failed_run.latency_ms = _latency_ms(failed_run.start_time, failed_run.end_time)
-            failed_run.token_count = failed_run.token_count or 0
-            failed_run.estimated_cost = failed_run.estimated_cost or Decimal("0.000000")
+            run.status = AgentRunStatus.RUNNING
+            run.start_time = _utc_now()
             self._trace(
-                run=failed_run,
-                event_name="AgentRunFailed",
-                attributes={
-                    "status": AgentRunStatus.FAILED.value,
-                    "error_message": failed_run.error_message,
-                },
+                run=run,
+                event_name="AgentRunStarted",
+                attributes={"status": AgentRunStatus.RUNNING.value},
             )
             self._session.commit()
-            self._session.refresh(failed_run)
-            return failed_run
+
+            try:
+                tool_name = self._resolve_tool_name(run)
+                tool_input = self._resolve_tool_input(run, tool_name)
+                gateway_result = self._safety_gateway.invoke_tool(
+                    run=run,
+                    tool_name=tool_name,
+                    tool_input=tool_input,
+                )
+
+                self._apply_gateway_result(run=run, gateway_result=gateway_result)
+                self._session.commit()
+                self._session.refresh(run)
+                span.set_attribute("run.status", run.status.value)
+                return run
+            except Exception as exc:
+                self._session.rollback()
+                failed_run = self._repository.get_run_for_update(run_id)
+                if failed_run is None:
+                    raise
+
+                failed_run.status = AgentRunStatus.FAILED
+                failed_run.error_message = str(exc)
+                failed_run.end_time = _utc_now()
+                failed_run.latency_ms = _latency_ms(failed_run.start_time, failed_run.end_time)
+                failed_run.token_count = failed_run.token_count or 0
+                failed_run.estimated_cost = failed_run.estimated_cost or Decimal("0.000000")
+                self._trace(
+                    run=failed_run,
+                    event_name="AgentRunFailed",
+                    attributes={
+                        "status": AgentRunStatus.FAILED.value,
+                        "error_message": failed_run.error_message,
+                    },
+                )
+                self._metrics.record_run_failed()
+                self._metrics.observe_run_latency_ms(failed_run.latency_ms)
+                self._session.commit()
+                self._session.refresh(failed_run)
+                span.record_exception(exc)
+                span.set_attribute("run.status", failed_run.status.value)
+                return failed_run
 
     def create_and_execute_run(
         self,
@@ -138,6 +151,7 @@ class RuntimeService:
         if gateway_result.decision == PolicyDecision.REQUIRE_APPROVAL:
             run.status = AgentRunStatus.BLOCKED
             run.error_message = gateway_result.reason
+            self._metrics.record_run_blocked()
             return
 
         if gateway_result.decision == PolicyDecision.DENY:
@@ -145,6 +159,8 @@ class RuntimeService:
             run.error_message = gateway_result.reason
             run.end_time = _utc_now()
             run.latency_ms = _latency_ms(run.start_time, run.end_time)
+            self._metrics.record_run_blocked()
+            self._metrics.observe_run_latency_ms(run.latency_ms)
             return
 
         tool_result = gateway_result.tool_result
@@ -166,6 +182,8 @@ class RuntimeService:
                     "error_message": run.error_message,
                 },
             )
+            self._metrics.record_run_failed()
+            self._metrics.observe_run_latency_ms(run.latency_ms)
             return
 
         run.output = {
@@ -186,6 +204,8 @@ class RuntimeService:
                 "latency_ms": run.latency_ms,
             },
         )
+        self._metrics.record_run_success()
+        self._metrics.observe_run_latency_ms(run.latency_ms)
 
     def _resolve_tool_name(self, run: AgentRun) -> str:
         configured_tool = run.input.get("tool_name")
