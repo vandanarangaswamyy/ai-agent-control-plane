@@ -1,118 +1,85 @@
 # AI Agent Control Plane
 
-AI Agent Control Plane is a backend-first AgentOps platform for managing agent versions, executing runs, auditing tool use, evaluating behavior, observing failures, and controlling promotion to production.
+AI Agent Control Plane is a production-style control plane for AI agents. It tracks agent versions, executes runs, gates tool use with policy and human approval, records traces, runs evaluations, controls deployment to production, and now exposes a dashboard for operators and reviewers.
 
 ## Project Overview
 
-This project exists to provide the control layer around AI agents. It is not a chatbot and not a model provider wrapper. The core idea is to make every agent version, runtime action, approval, evaluation, and deployment event queryable and auditable.
+This repository is a backend-first platform with a frontend dashboard layered on top.
+
+- `backend/` contains the FastAPI service, SQLAlchemy models, Alembic migrations, Celery workers, and the domain services.
+- `frontend/` contains the Next.js 15 dashboard that consumes the backend APIs.
+- `docs/` contains the architectural and API documentation that future agents can use as project memory.
+
+The system is intentionally operational, not conversational. It is built to answer:
+
+- Which version ran?
+- What happened during execution?
+- Which tools were invoked?
+- Was the action allowed, blocked, or approved?
+- Did the version regress?
+- Can it be promoted safely?
 
 ## Problem Statement
 
-Teams can ship agent code quickly, but without a control plane they lose visibility into:
+Teams can ship agent logic quickly, but without a control plane they lose visibility and control.
 
-- which version ran,
-- what tools were used,
-- whether policy blocked an action,
-- whether a version regressed,
-- and whether production promotion was justified.
+This project solves the operational gap by making agent lifecycle events queryable and auditable:
 
-This repository implements the backend foundation for solving that operational gap.
+- versioned registry state,
+- runtime execution history,
+- policy and approval decisions,
+- trace timelines,
+- evaluation results and comparisons,
+- deployment promotion and rollback history,
+- and a dashboard that surfaces all of the above.
 
 ## Architecture Overview
 
 ```mermaid
 flowchart LR
-    Client[Client / Operator] --> API[FastAPI /api/v1]
+    User[Operator / Reviewer] --> UI[Next.js Dashboard]
+    UI -->|Rewrites / fetch| API[FastAPI /api/v1]
     API --> Services[Service Layer]
     Services --> Repos[Repository Layer]
     Repos --> DB[(PostgreSQL)]
     Services --> Tools[Mocked / Sandboxed Tools]
-    Services --> Celery[Celery Workers]
-    Celery --> Redis[(Redis)]
+    Services --> Workers[Celery Workers]
+    Workers --> Redis[(Redis)]
     Services --> Traces[Trace Persistence]
     Services --> Metrics[Prometheus Metrics]
     Services --> OTel[OpenTelemetry]
-```
-
-### Runtime Execution
-
-```mermaid
-flowchart TD
-    Run[Create Run] --> Safety[Safety Gateway]
-    Safety -->|ALLOW| Tool[Tool Execute]
-    Safety -->|REQUIRE_APPROVAL| Approval[Create Approval Request]
-    Safety -->|DENY| Block[Block Run]
-    Approval --> Resume[Approve / Reject]
-    Tool --> Persist[Persist Tool Call + Trace]
-    Persist --> Complete[Mark SUCCESS or FAILED]
-```
-
-### Safety Approval Workflow
-
-```mermaid
-flowchart TD
-    ToolCall[Tool Invocation] --> Check[Policy Check]
-    Check -->|ALLOW| Exec[Execute Tool]
-    Check -->|REQUIRE_APPROVAL| Request[Create Approval Request]
-    Check -->|DENY| Reject[Persist Blocked Trace]
-    Request --> Pending[Run BLOCKED]
-    Pending --> Decision{Human Review}
-    Decision -->|Approve| Resume[Resume Run]
-    Decision -->|Reject| Stop[Remain Blocked]
-    Resume --> Exec
-```
-
-### Evaluation Workflow
-
-```mermaid
-flowchart TD
-    Suite[Load Evaluation Suite] --> Execute[Run Cases]
-    Execute --> Runtime[Reuse Runtime + Safety + Tools]
-    Runtime --> Results[Persist Results]
-    Results --> Metrics[Compute Metrics]
-    Metrics --> Report[Generate Report]
-    Report --> Compare[Compare Versions]
-```
-
-### Deployment Workflow
-
-```mermaid
-flowchart TD
-    Gate[Latest Evaluation Gate] -->|Pass + Threshold| Promote[Promote Version]
-    Gate -->|Fail / Missing| Reject[Reject Promotion]
-    Promote --> Demote[Demote Previous Production]
-    Demote --> History[Persist Deployment Event]
-    History --> Trace[Persist Deployment Trace]
-    Promote --> Prod[Single PRODUCTION Version]
-    Prod --> Rollback[Rollback]
 ```
 
 ## Core Features
 
 - Agent registry with versioned configurations.
 - Runtime execution with tool call auditing.
-- Safety-gated tool execution and human approval workflows.
+- Safety-gated tool execution and approval workflows.
 - Trace-level observability and failure inspection.
 - Evaluation harness for suites, reporting, and regression detection.
 - Deployment control with promotion gates, rollback, and deployment history.
+- Dashboard pages for agents, runs, approvals, evaluations, deployment history, and timeline inspection.
 
 ## Engineering Highlights
 
-For recruiters, hiring managers, and engineers, the key capabilities are:
+For recruiters, hiring managers, and engineers, the notable pieces are:
 
-- **Agent versioning**: every agent has immutable versions with lifecycle control.
-- **Safety-gated tool execution**: every tool invocation is policy-checked before execution.
-- **Evaluation harness**: suites can be run against agent versions and compared over time.
+- **Agent versioning**: agent configs are immutable once created, with lifecycle transitions tracked explicitly.
+- **Safety-gated tool execution**: every tool call is evaluated before execution and can be blocked or sent for approval.
+- **Evaluation harness**: suites run against agent versions and generate comparable aggregate metrics.
 - **Trace-level observability**: runs, tools, approvals, evaluations, and deployments are persisted as timelines.
-- **Deployment controls**: production promotion is gated by evaluation outcomes and rollback is history-aware.
+- **Deployment controls**: production promotion is gated by evaluations and rollback is history-aware.
+- **Dashboard delivery**: the frontend consumes the real API surface with typed client code and reactive data fetching.
 
 ## Technology Stack
+
+Backend:
 
 - Python 3.12+
 - FastAPI
 - SQLAlchemy 2.0
-- PostgreSQL
 - Alembic
+- PostgreSQL
 - Celery
 - Redis
 - Pydantic v2
@@ -121,62 +88,92 @@ For recruiters, hiring managers, and engineers, the key capabilities are:
 - uv
 - Pytest
 
+Frontend:
+
+- Next.js 15+
+- TypeScript
+- React 19
+- Tailwind CSS
+- shadcn-style UI primitives
+- React Query
+
 ## Local Development Setup
 
-1. Copy environment configuration:
+1. Copy environment files:
 
    ```bash
    cp .env.example .env
+   cp frontend/.env.example frontend/.env.local
    ```
 
-2. Start local services:
+2. Start the backend infrastructure:
 
    ```bash
    make dev
    ```
 
-3. Sync the backend environment:
+3. Build and start the full stack, including the frontend:
 
    ```bash
-   make sync
+   docker compose up --build
    ```
 
-4. Run database migrations:
+4. Prepare the backend environment:
 
    ```bash
-   make migrate
+   cd backend
+   uv sync --locked --dev
+   uv run alembic upgrade head
    ```
 
-5. Once `make dev` is running, the API is available at `http://localhost:8000`.
+5. If you want to run the dashboard outside Docker:
+
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+6. Open the dashboard at:
+
+   ```text
+   http://localhost:3000
+   ```
+
+The dashboard rewrites `/api/*`, `/health`, `/ready`, and `/metrics` to the backend, so browser requests stay simple during local development.
 
 ## Running Tests
 
-Run the backend test suite:
+Backend:
 
 ```bash
 cd backend
 uv run pytest
+uv run ruff check .
 ```
 
-Run lint checks:
+Frontend:
 
 ```bash
-cd backend
-uv run ruff check .
+cd frontend
+npm run typecheck
+npm run build
 ```
 
 ## Database Migrations
 
-Create a revision:
+Create a backend revision:
 
 ```bash
-make revision MSG="describe schema change"
+cd backend
+uv run alembic revision --autogenerate -m "describe schema change"
 ```
 
 Apply migrations:
 
 ```bash
-make migrate
+cd backend
+uv run alembic upgrade head
 ```
 
 Validate against Docker Postgres:
@@ -187,7 +184,7 @@ docker compose run --rm api uv run alembic upgrade head
 
 ## API Overview
 
-Public API groups:
+Backend route groups:
 
 - `GET /health`
 - `GET /ready`
@@ -218,7 +215,19 @@ Public API groups:
 - `POST /api/v1/deployments/promote`
 - `POST /api/v1/deployments/rollback`
 
-Full request and response examples live in [docs/api_reference.md](docs/api_reference.md).
+The dashboard consumes these routes directly through a typed API client in `frontend/lib/api/`.
+
+## Dashboard Route Map
+
+- `/` dashboard home
+- `/agents` agent registry
+- `/agents/[agentId]` agent details
+- `/runs` run history
+- `/runs/[runId]/timeline` run timeline viewer
+- `/approvals` approval queue
+- `/evaluations` evaluation history
+- `/evaluations/compare` evaluation comparison
+- `/deployments` deployment history
 
 ## Project Roadmap
 
@@ -232,20 +241,23 @@ Completed backend milestones:
 6. Evaluation Harness
 7. Deployment Control
 
+Current frontend milestone:
+
+8. Dashboard MVP
+
 Next roadmap items:
 
-1. Backend hardening
-2. Frontend Dashboard
-3. Terraform/AWS
+9. Backend hardening
+10. Terraform / AWS deployment
 
 ## Future Improvements
 
 - Persist policy configuration instead of hardcoding defaults.
-- Move evaluation suites into a managed catalog if suite operations get larger.
+- Move evaluation suites into a managed catalog if suite operations grow.
 - Add stronger auth around approvals and deployment actions.
 - Expand runtime into richer multi-step orchestration.
 - Replace local-only telemetry export with production collectors and backends.
-- Add frontend and infrastructure layers only after the backend contract is stable.
+- Add formal release and operational runbooks.
 
 ## Documentation
 
@@ -255,6 +267,6 @@ Next roadmap items:
 
 ## Notes
 
-- `uv` is the supported dependency manager.
+- `uv` is the supported dependency manager for the backend.
+- The frontend is a separate Next.js app under `frontend/`.
 - Do not add `requirements.txt` unless tooling explicitly requires it.
-- This repository is intentionally backend-first.
