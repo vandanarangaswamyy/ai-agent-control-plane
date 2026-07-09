@@ -60,9 +60,12 @@ export default function DashboardPage() {
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Total agents" value={formatNumber(dashboard.agentCount)} icon={<Users className="h-4 w-4" />} />
         <StatCard label="Total runs" value={formatNumber(dashboard.totalRuns)} icon={<BarChart3 className="h-4 w-4" />} />
+        <StatCard label="Approvals" value={formatNumber(dashboard.totalApprovals)} icon={<ShieldCheck className="h-4 w-4" />} />
+        <StatCard label="Deployments" value={formatNumber(dashboard.totalDeployments)} icon={<RefreshCw className="h-4 w-4" />} />
+        <StatCard label="Evaluations" value={formatNumber(dashboard.totalEvaluations)} icon={<Clock3 className="h-4 w-4" />} />
         <StatCard label="Success rate" value={formatPercent(dashboard.successRate)} icon={<ShieldCheck className="h-4 w-4" />} />
         <StatCard label="Failure rate" value={formatPercent(dashboard.failureRate)} icon={<Clock3 className="h-4 w-4" />} />
         <StatCard label="Pending approvals" value={formatNumber(dashboard.pendingApprovals)} icon={<ShieldCheck className="h-4 w-4" />} />

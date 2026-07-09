@@ -142,6 +142,29 @@ Frontend:
 
 The dashboard rewrites `/api/*`, `/health`, `/ready`, and `/metrics` to the backend, so browser requests stay simple during local development.
 
+## Quick Demo
+
+The fastest way to see the platform populated is:
+
+```bash
+docker compose up --build
+python scripts/seed_demo.py
+python scripts/demo_check.py
+```
+
+Then open:
+
+- http://localhost:3000
+- http://localhost:8000/docs
+
+Recommended demo flow:
+
+1. Seed the database and backend metrics with `python scripts/seed_demo.py`.
+2. Run `python scripts/demo_check.py` to confirm the backend, database, and metrics endpoint are healthy.
+3. Open the dashboard home first to show the operational summary.
+4. Move into agents, runs, approvals, evaluations, and deployments to show the full control-plane story.
+5. Use the run timeline viewer and failure analysis pages to show trace-level inspection.
+
 ## Running Tests
 
 Backend:

@@ -12,7 +12,20 @@ class EvaluationSuiteLoader:
     """Load and validate evaluation suite definitions from disk."""
 
     def __init__(self, suites_dir: Path | None = None) -> None:
-        self._suites_dir = suites_dir or Path(__file__).resolve().parents[3] / "evals" / "suites"
+        if suites_dir is not None:
+            self._suites_dir = suites_dir
+            return
+
+        candidates = [
+            Path(__file__).resolve().parents[2] / "evals" / "suites",
+            Path(__file__).resolve().parents[3] / "evals" / "suites",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                self._suites_dir = candidate
+                break
+        else:
+            self._suites_dir = candidates[0]
 
     def load_suite(self, suite_name: str) -> EvaluationSuiteDefinition:
         suite_path = self._suites_dir / f"{suite_name}.json"

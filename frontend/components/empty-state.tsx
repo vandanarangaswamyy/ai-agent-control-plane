@@ -18,9 +18,11 @@ export function EmptyState({
         <div className="space-y-1">
           <p className="font-medium">{title}</p>
           <p className="max-w-md text-sm text-muted-foreground">{message}</p>
+          <p className="text-xs text-muted-foreground">
+            Seed demo data to populate this view and keep the dashboard active.
+          </p>
         </div>
       </CardContent>
     </Card>
   );
 }
-

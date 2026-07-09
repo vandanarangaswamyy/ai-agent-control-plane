@@ -1,0 +1,17 @@
+{
+  "name": "demo-seed-suite",
+  "cases": [
+    {
+      "name": "demo-file-read",
+      "task": "pyproject.toml",
+      "tool_name": "file",
+      "expected_tool_name": "file"
+    },
+    {
+      "name": "demo-browser-scan",
+      "task": "Example Domain",
+      "tool_name": "browser",
+      "expected_tool_name": "browser"
+    }
+  ]
+}

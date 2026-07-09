@@ -1,13 +1,19 @@
 import { listAgentDeployments } from "@/lib/api/agents";
 import { listApprovals } from "@/lib/api/approvals";
-import { getMetricsText, } from "@/lib/api/metrics";
+import { getMetricsText } from "@/lib/api/metrics";
 import { loadAgents, loadAllAgentVersions } from "@/lib/directory";
+import { fetchAllPages } from "@/lib/pagination";
+import { listEvaluations } from "@/lib/api/evaluations";
+import { listRuns } from "@/lib/api/runs";
 import { parsePrometheusMetrics, averageFromHistogram } from "@/lib/metrics";
 import type { DeploymentEventRead, ApprovalRequestRead } from "@/lib/api/types";
 
 export interface DashboardOverview {
   agentCount: number;
   totalRuns: number;
+  totalApprovals: number;
+  totalDeployments: number;
+  totalEvaluations: number;
   successRate: number | null;
   failureRate: number | null;
   pendingApprovals: number;
@@ -38,10 +44,20 @@ async function listAllApprovals(): Promise<ApprovalRequestRead[]> {
   return approvals;
 }
 
+async function listAllRuns() {
+  return fetchAllPages(({ limit, offset }) => listRuns({ limit, offset }));
+}
+
+async function listAllEvaluations() {
+  return fetchAllPages(({ limit, offset }) => listEvaluations({ limit, offset }));
+}
+
 export async function loadDashboardOverview(): Promise<DashboardOverview> {
   const agents = await loadAgents();
   const versions = await loadAllAgentVersions();
   const approvals = await listAllApprovals();
+  const runs = await listAllRuns();
+  const evaluations = await listAllEvaluations();
   const metricsText = await getMetricsText();
   const metrics = parsePrometheusMetrics(metricsText);
   const averageLatencySeconds = averageFromHistogram(metrics, "agent_run_latency_seconds");
@@ -65,21 +81,21 @@ export async function loadDashboardOverview(): Promise<DashboardOverview> {
     }),
   );
 
-  const recentDeployments = deploymentPairs
-    .flat()
+  const allDeployments = deploymentPairs.flat();
+  const recentDeployments = allDeployments
     .sort((left, right) => right.created_at.localeCompare(left.created_at))
     .slice(0, 12);
 
-  const totalRuns =
-    metrics.counters.agent_runs_total ??
-    metrics.counters.agent_runs ??
-    0;
-  const successfulRuns = metrics.counters.agent_runs_success_total ?? metrics.counters.agent_runs_success ?? 0;
-  const failedRuns = metrics.counters.agent_runs_failed_total ?? metrics.counters.agent_runs_failed ?? 0;
+  const totalRuns = runs.length;
+  const successfulRuns = runs.filter((run) => run.status === "SUCCESS").length;
+  const failedRuns = runs.filter((run) => run.status === "FAILED").length;
 
   return {
     agentCount: agents.length,
     totalRuns,
+    totalApprovals: approvals.length,
+    totalDeployments: allDeployments.length,
+    totalEvaluations: evaluations.length,
     successRate: totalRuns > 0 ? (successfulRuns / totalRuns) * 100 : null,
     failureRate: totalRuns > 0 ? (failedRuns / totalRuns) * 100 : null,
     pendingApprovals: approvals.filter((approval) => approval.status === "PENDING").length,
