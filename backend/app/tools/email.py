@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 from app.tools.base import BaseTool, ToolResult
 
 
@@ -23,8 +25,9 @@ class EmailTool(BaseTool):
             output={
                 "to": recipient,
                 "subject": subject,
-                "sent": False,
-                "mock": True,
+                "status": "queued",
+                "provider": "mock",
+                "message_id": f"msg_{uuid.uuid4().hex[:16]}",
             },
             token_count=max(1, len(subject.split())),
         )

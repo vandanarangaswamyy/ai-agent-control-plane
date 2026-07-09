@@ -25,11 +25,14 @@ class FileTool(BaseTool):
             return ToolResult(success=False, error_message="file does not exist")
 
         content = path.read_text(encoding="utf-8")
+        preview = content[:400].strip()
         return ToolResult(
             success=True,
             output={
                 "path": str(path.relative_to(self._root)),
-                "content": content,
+                "exists": True,
+                "preview": preview,
+                "status": "success",
             },
             token_count=max(1, len(content.split())),
         )

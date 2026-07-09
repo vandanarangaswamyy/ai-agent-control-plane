@@ -1,0 +1,18 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:amc.com
+X-PUBLISHED-TTL:P1W
+BEGIN:VEVENT
+UID:c1978bb5-8596-4829-8364-3d898fffe526
+DTSTART:20260601T191500Z
+SEQUENCE:0
+TRANSP:OPAQUE
+DTEND:20260601T212300Z
+LOCATION:175 Tremont St boston MA 02111
+SUMMARY:Obsession at AMC Boston Common 19
+CLASS:PUBLIC
+DESCRIPTION:The event start time is when trailers and additional content begin. The movie will start 25-30 minutes after the listed showtime. Synopsis: After breaking the mysterious "One Wish Willow" to win his crush's heart, a hopeless romantic finds himself getting exactly what he asked for but soon discovers that some desires come at a dark, sinister price.
+ORGANIZER:undefined <undefined>
+DTSTAMP:20260601T123301
+END:VEVENT
+END:VCALENDAR
